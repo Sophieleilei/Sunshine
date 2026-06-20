@@ -1,0 +1,4 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+xrpl-py>=4.0
+requests>=2.31
