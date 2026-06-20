@@ -11,3 +11,6 @@ demo_wallets.json
 .claude/
 *.png
 .DS_Store
+
+# Old NetiShield reference dashboard (kept locally as a style reference, not part of Sunshine)
+netishield_live_task_dashboard.html

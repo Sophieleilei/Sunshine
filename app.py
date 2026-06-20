@@ -1,8 +1,11 @@
 """
 Sunshine backend (FastAPI).
 
+Non-custodial, compliance-gated agent cross-border payment orchestrator. Runs the
+compliance + preparation pipeline (see pipeline.py); never holds the agent's private key.
+
   GET  /         -> serve the sunshine.html frontend
-  POST /pay      -> receive Alice's x402 payment intent, run the real pipeline, return JSON
+  POST /pay      -> receive Alice's payment intent, run the pipeline, return JSON
   GET  /health   -> health check
 
 Run:
@@ -22,7 +25,8 @@ from pipeline import run_pipeline
 BASE = Path(__file__).parent
 WALLETS_FILE = BASE / "demo_wallets.json"
 
-app = FastAPI(title="Sunshine", description="x402 → XRPL payment pipeline demo")
+app = FastAPI(title="Sunshine",
+              description="Non-custodial, compliance-gated agent cross-border payment orchestrator")
 
 
 def alice_address() -> str:
@@ -58,7 +62,7 @@ def alice():
 
 @app.post("/pay")
 def pay(req: PayRequest):
-    """Entry point for Alice's (mock) x402 request -> run the real pipeline."""
+    """Entry point for Alice's payment intent -> run the pipeline."""
     intent = dict(req.intent)
     # If the frontend left payer empty, default to the fixed Alice address
     # so Precheck still hits a real account.

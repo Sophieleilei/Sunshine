@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sunshine · x402 payment pipeline</title>
+<title>Sunshine · non-custodial agent payments</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.2.0/dist/tabler-icons.min.css">
 <style>
   :root{
@@ -39,10 +39,10 @@
 <header class="app">
   <span class="logo"><i class="ti ti-sun-filled" style="font-size:18px"></i></span>
   <h1>Sunshine</h1>
-  <span class="tag">x402 → XRPL payment pipeline · testnet</span>
+  <span class="tag">non-custodial agent cross-border payments · XRPL testnet</span>
 </header>
 
-<h2 class="sr-only">Sunshine demo dashboard: a payment intent request panel where agent Alice submits a payment to an x402 endpoint, followed by live task tracking through precheck, KYA gate, DEX conversion and settlement, with a timestamped event log.</h2>
+<h2 class="sr-only">Sunshine demo dashboard: agent Alice submits a cross-border payment intent, followed by live task tracking through precheck, trustline KYA, unsigned-tx preparation, a local non-custodial signing step, submission with DEX conversion, and bank off-ramp, with a timestamped event log and an audit log.</h2>
 
 <div style="padding: 1rem 0;">
 
@@ -51,23 +51,23 @@
       <div style="width:32px; height:32px; border-radius:50%; background:var(--color-background-info); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:500; color:var(--color-text-info);">A</div>
       <div style="display:flex; flex-direction:column;">
         <span style="font-size:14px; font-weight:500;">Alice · payer agent</span>
-        <span style="font-size:12px; color:var(--color-text-secondary);">submits a payment intent</span>
+        <span style="font-size:12px; color:var(--color-text-secondary);">submits a cross-border payment intent</span>
       </div>
     </div>
 
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; font-family:var(--font-mono); font-size:12px;">
       <span style="padding:3px 8px; border-radius:var(--border-radius-md); background:var(--color-background-success); color:var(--color-text-success); font-weight:500;">POST</span>
-      <span style="color:var(--color-text-secondary);">https://api.sunshine.dev/pay</span>
-      <span style="margin-left:auto; padding:3px 8px; border-radius:var(--border-radius-md); background:var(--color-background-secondary); color:var(--color-text-tertiary);">x402</span>
+      <span style="color:var(--color-text-secondary);">https://api.sunshine.dev/prepare</span>
+      <span style="margin-left:auto; padding:3px 8px; border-radius:var(--border-radius-md); background:var(--color-background-secondary); color:var(--color-text-tertiary);">non-custodial</span>
     </div>
 
     <textarea id="intent" rows="7" spellcheck="false" style="width:100%; font-family:var(--font-mono); font-size:12px; line-height:1.6; resize:vertical; padding:10px 12px; border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-md);">{
   "payer_xrpl": "loading…",
-  "payee_xrpl": "rPay7Hn…payee",
+  "payee_clabe": "646180157000000004",
   "amount": 2.50,
   "source_currency": "RLUSD",
-  "target_currency": "EUR",
-  "payee_iban": "CH93 0076 2011 6238 5295 7"
+  "target_currency": "MXN",
+  "payee_country": "MX"
 }</textarea>
 
     <div style="display:flex; align-items:center; gap:8px; margin-top:10px; flex-wrap:wrap;">
@@ -109,13 +109,15 @@
 <script>
 // Each step keeps only display metadata; status / log / payload all come from the real backend response.
 const META = {
-  req:    {icon:"ti-robot",           sub:"intent received via x402"},
-  pre:    {icon:"ti-search",          sub:"activation + balance (REAL)"},
-  kya:    {icon:"ti-id-badge-2",      sub:"verify agent credential (stub)"},
-  dex:    {icon:"ti-arrows-exchange", sub:"RLUSD → EUR token (stub)"},
-  settle: {icon:"ti-coin",            sub:"pay recipient wallet (stub)"},
+  req:     {icon:"ti-robot",           sub:"payment intent received"},
+  pre:     {icon:"ti-search",          sub:"activation + balance (REAL)"},
+  kya:     {icon:"ti-id-badge-2",      sub:"issuer-authorized trustline (stub)"},
+  prepare: {icon:"ti-file-pencil",     sub:"DEX pathfind + unsigned tx (stub)"},
+  sign:    {icon:"ti-signature",       sub:"agent signs locally · non-custodial"},
+  submit:  {icon:"ti-arrows-exchange", sub:"submit + DEX swap + tokenize (stub)"},
+  offramp: {icon:"ti-building-bank",   sub:"licensed off-ramp → CLABE (mock)"},
 };
-const ORDER = ["req","pre","kya","dex","settle"];
+const ORDER = ["req","pre","kya","prepare","sign","submit","offramp"];
 
 let RES = [];            // tasks returned by the backend (in ORDER)
 let states = {};         // id -> render state: pending/active/success/failed/skipped
@@ -277,8 +279,8 @@ function step(){
     setBadge("settled","ok");
     const it=lastIntent||{};
     recordAudit("SUCCESS",
-      `Alice → ${it.payee_xrpl||"payee"} · ${it.amount} ${it.source_currency||""}→${it.target_currency||""}`,
-      "all 5 tasks passed · settled");
+      `Alice → CLABE ${it.payee_clabe||"recipient"} · ${it.amount} ${it.source_currency||""}→${it.target_currency||""}`,
+      "non-custodial flow complete · off-ramped");
     selected=RES.length-1; renderTasks(); showDetail(RES.length-1); return;
   }
   const cur=RES[cursor]; states[cur.id]="active";
