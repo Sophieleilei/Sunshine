@@ -1,0 +1,23 @@
+{
+  "name": "fx-trustworthy-agent",
+  "version": "0.1.0",
+  "description": "Autonomous cross-border invoice settlement agent on XRPL Testnet (MPT -> RLUSD -> DEX -> KYA -> bank).",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "setup": "node src/scripts/setup.js",
+    "seed": "node src/scripts/seed.js",
+    "serve": "node src/server.js",
+    "demo": "node src/index.js",
+    "demo:hold": "node src/index.js --kya=HOLD",
+    "demo:revert": "node src/index.js --kya=REVERT"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "five-bells-condition": "^5.0.1",
+    "xrpl": "^4.1.0"
+  }
+}
