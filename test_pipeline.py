@@ -16,6 +16,6 @@ def show(title, intent, unverified=False):
 base = {"payer_xrpl": alice, "payee_xrpl": "rPay7Hn", "amount": 2.50,
         "source_currency": "RLUSD", "target_currency": "EUR"}
 
-show("PASS (够钱 2.50)", base)
-show("FAIL 余额不足 (要付 100)", {**base, "amount": 100})
-show("FAIL 未验证 agent (KYA DENY)", base, unverified=True)
+show("PASS (enough funds, 2.50)", base)
+show("FAIL insufficient balance (pay 100)", {**base, "amount": 100})
+show("FAIL unverified agent (KYA DENY)", base, unverified=True)

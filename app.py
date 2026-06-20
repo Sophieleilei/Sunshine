@@ -1,13 +1,13 @@
 """
-Sunshine 后端 (FastAPI)。
+Sunshine backend (FastAPI).
 
-  GET  /         -> 提供 sunshine.html 前端
-  POST /pay      -> 接收 Alice 的 x402 支付意图，跑真实管线，返回结果 JSON
-  GET  /health   -> 健康检查
+  GET  /         -> serve the sunshine.html frontend
+  POST /pay      -> receive Alice's x402 payment intent, run the real pipeline, return JSON
+  GET  /health   -> health check
 
-启动：
+Run:
   .venv/bin/uvicorn app:app --reload --port 8000
-  浏览器打开 http://localhost:8000
+  open http://localhost:8000
 """
 
 import json
@@ -26,7 +26,7 @@ app = FastAPI(title="Sunshine", description="x402 → XRPL payment pipeline demo
 
 
 def alice_address() -> str:
-    """Alice = demo_wallets.json 里的固定钱包。"""
+    """Alice = the fixed wallet in demo_wallets.json."""
     if WALLETS_FILE.exists():
         data = json.loads(WALLETS_FILE.read_text())
         addr = data.get("main", {}).get("address")
@@ -52,19 +52,20 @@ def health():
 
 @app.get("/alice")
 def alice():
-    """前端用来预填 Alice 的真实地址。"""
+    """Used by the frontend to prefill Alice's real address."""
     return {"address": alice_address()}
 
 
 @app.post("/pay")
 def pay(req: PayRequest):
-    """Alice 的 (mock) x402 请求入口 -> 跑真实管线。"""
+    """Entry point for Alice's (mock) x402 request -> run the real pipeline."""
     intent = dict(req.intent)
-    # 若前端没填 payer，默认用固定的 Alice 地址（保证 Precheck 打到真实账户）
+    # If the frontend left payer empty, default to the fixed Alice address
+    # so Precheck still hits a real account.
     if not intent.get("payer_xrpl"):
         intent["payer_xrpl"] = alice_address()
     try:
         result = run_pipeline(intent, unverified=req.unverified)
-    except Exception as e:  # XRPL 网络异常等 -> 500 + 原因
+    except Exception as e:  # XRPL network errors etc. -> 500 + reason
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
     return result

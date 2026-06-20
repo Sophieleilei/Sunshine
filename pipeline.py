@@ -1,13 +1,14 @@
 """
-Sunshine 支付管线编排。
+Sunshine payment-pipeline orchestration.
 
-5 步：req(mock x402) → pre(真实) → kya(stub) → dex(stub) → settle(stub)
-只有 Precheck 是真实打 XRPL testnet 的；其余三步是留好接口的 stub，
-你之后往 _task_kya / _task_dex / _task_settle 里填真实逻辑即可，不动其他部分。
+5 steps: req(mock x402) -> pre(REAL) -> kya(stub) -> dex(stub) -> settle(stub)
+Only Precheck actually hits the XRPL testnet; the other three are stubs with a
+defined interface. Fill in real logic in _task_kya / _task_dex / _task_settle
+later without touching anything else.
 
-每步返回一个 dict: {id, label, status, log, payload}
-  status ∈ pass / fail / skipped
-管线整体返回: {ok, halted_at, tasks:[...]}
+Each step returns a dict: {id, label, status, log, payload}
+  status in pass / fail / skipped
+The whole pipeline returns: {ok, halted_at, tasks:[...]}
 """
 
 from xrpl.clients import JsonRpcClient
@@ -18,7 +19,7 @@ TESTNET_URL = "https://s.altnet.rippletest.net:51234"
 
 
 def _task_req(intent: dict) -> dict:
-    """x402 端点：收下 Alice 的支付意图，返回 402 Payment Required（mock）。"""
+    """x402 endpoint: accept Alice's payment intent, return 402 Payment Required (mock)."""
     return {
         "id": "req",
         "label": "Agent request",
@@ -36,7 +37,7 @@ def _task_req(intent: dict) -> dict:
 
 
 def _task_pre(client: JsonRpcClient, intent: dict) -> dict:
-    """Task 1 · Precheck —— 真实：账户激活 + Alice 钱够不够。"""
+    """Task 1 · Precheck — REAL: account activation + whether Alice has enough funds."""
     alice = intent.get("payer_xrpl", "")
     required = float(intent.get("amount", 0) or 0)
     try:
@@ -73,7 +74,7 @@ def _task_pre(client: JsonRpcClient, intent: dict) -> dict:
 
 
 def _task_kya(intent: dict, unverified: bool) -> dict:
-    """Task 2 · KYA gate —— STUB。TODO: 接真实 XLS-70 credential 查询。"""
+    """Task 2 · KYA gate — STUB. TODO: wire up real XLS-70 credential lookup."""
     if unverified:
         return {
             "id": "kya",
@@ -94,7 +95,7 @@ def _task_kya(intent: dict, unverified: bool) -> dict:
 
 
 def _task_dex(intent: dict) -> dict:
-    """Task 3 · DEX convert —— STUB。TODO: 接真实 DEX pathfinding。"""
+    """Task 3 · DEX convert — STUB. TODO: wire up real DEX pathfinding."""
     return {
         "id": "dex",
         "label": "Task 3 · DEX convert",
@@ -106,7 +107,7 @@ def _task_dex(intent: dict) -> dict:
 
 
 def _task_settle(intent: dict) -> dict:
-    """Task 4 · Settle —— STUB。TODO: 接真实 XRPL Payment 结算。"""
+    """Task 4 · Settle — STUB. TODO: wire up a real XRPL Payment settlement."""
     return {
         "id": "settle",
         "label": "Task 4 · Settle",
@@ -118,7 +119,7 @@ def _task_settle(intent: dict) -> dict:
 
 def run_pipeline(intent: dict, unverified: bool = False,
                  client: JsonRpcClient | None = None) -> dict:
-    """跑完整管线。任一步 fail 即 halt，后续步标记 skipped。"""
+    """Run the full pipeline. Any failing step halts it; later steps are marked skipped."""
     client = client or JsonRpcClient(TESTNET_URL)
     tasks: list[dict] = []
     halted_at = None

@@ -1,46 +1,48 @@
 """
-XRPL 账户激活检查 —— 发交易前的 fail-fast 守卫。
+XRPL account activation check — a fail-fast guard to run before sending a transaction.
 
-原理：
-    AccountInfo 请求一个【未上链】的地址时，rippled 返回错误 `actNotFound`，
-    表示该账户根本没有 AccountRoot（没被激活）。这种账户：
-      - 不能作为 sender 发任何交易（没法签名上链）；
-      - 作为 destination 时，第一笔 >= base reserve 的 Payment 才会创建它。
-    所以在动手发交易前先查一下，能最早、最便宜地失败。
+Why:
+    When AccountInfo is asked about an address that is NOT on-chain, rippled returns
+    the error `actNotFound`, meaning the account has no AccountRoot (it is unactivated).
+    Such an account:
+      - cannot act as a sender for any transaction (it cannot sign on-chain);
+      - as a destination, only the first Payment of >= base reserve will create it.
+    So checking before you act lets you fail as early and as cheaply as possible.
 """
 
 from xrpl.clients import JsonRpcClient
 from xrpl.models.requests import AccountInfo
 
-# Testnet 当前 base reserve（激活一个账户需要的最低锁定 XRP）。
-# 余额里这部分不能动，所以"可花的钱" = 余额 - reserve。
+# Current testnet base reserve (the minimum XRP locked to activate an account).
+# This portion of the balance cannot be spent, so "spendable" = balance - reserve.
 BASE_RESERVE_XRP = 1.0
 
 
 def is_account_active(client: JsonRpcClient, address: str) -> bool:
-    """账户是否已激活（链上存在 AccountRoot）。
+    """Whether the account is activated (an AccountRoot exists on-chain).
 
-    未激活 -> rippled 返回 actNotFound -> resp.is_successful() 为 False。
+    Unactivated -> rippled returns actNotFound -> resp.is_successful() is False.
     """
     resp = client.request(AccountInfo(account=address))
     if resp.is_successful():
         return True
-    # 明确区分 "未激活" 和 "其他错误（网络/参数）"
+    # Clearly distinguish "unactivated" from "other errors (network/params)"
     if resp.result.get("error") == "actNotFound":
         return False
-    # 其他错误不该被当成 "未激活" 静默吞掉
+    # Other errors must not be silently swallowed as "unactivated"
     raise RuntimeError(
         f"AccountInfo query failed for {address}: {resp.result.get('error')} "
         f"- {resp.result.get('error_message', '')}"
     )
 
 
-def require_active(client: JsonRpcClient, address: str, role: str = "账户") -> None:
-    """fail-fast 守卫：账户未激活就立刻抛错，别等交易提交失败。
+def require_active(client: JsonRpcClient, address: str, role: str = "account") -> None:
+    """fail-fast guard: raise immediately if the account is unactivated, instead of
+    waiting for the transaction submit to fail.
 
-    用法：
+    Usage:
         require_active(client, alice.classic_address, role="Alice")
-        # 通过这行 = Alice 已上链，后面发交易才有意义
+        # Passing this line = Alice is on-chain, so sending a transaction now makes sense
     """
     if not is_account_active(client, address):
         raise ValueError(
@@ -51,7 +53,7 @@ def require_active(client: JsonRpcClient, address: str, role: str = "账户") ->
 
 
 def get_xrp_balance(client: JsonRpcClient, address: str) -> float:
-    """读取账户链上真实 XRP 余额（单位 XRP）。未激活则抛错。"""
+    """Read the account's real on-chain XRP balance (in XRP). Raises if unactivated."""
     resp = client.request(AccountInfo(account=address))
     if not resp.is_successful():
         raise ValueError(
@@ -64,9 +66,9 @@ def get_xrp_balance(client: JsonRpcClient, address: str) -> float:
 def has_sufficient_balance(
     client: JsonRpcClient, address: str, required_xrp: float
 ) -> tuple[bool, float, float]:
-    """Alice 的钱够不够付 required_xrp？
+    """Does the account have enough to pay required_xrp?
 
-    返回 (是否够, 真实余额, 可花余额=余额-reserve)。
+    Returns (is_enough, real_balance, spendable=balance-reserve).
     """
     balance = get_xrp_balance(client, address)
     spendable = balance - BASE_RESERVE_XRP
@@ -74,13 +76,13 @@ def has_sufficient_balance(
 
 
 def require_sufficient_balance(
-    client: JsonRpcClient, address: str, required_xrp: float, role: str = "账户"
+    client: JsonRpcClient, address: str, required_xrp: float, role: str = "account"
 ) -> None:
-    """fail-fast 守卫：Alice 钱不够付 required_xrp 就立刻抛错。
+    """fail-fast guard: raise immediately if the account cannot pay required_xrp.
 
-    用法：
+    Usage:
         require_sufficient_balance(client, alice.classic_address, 2.50, role="Alice")
-        # 走过这行 = Alice 余额足够，发交易才有意义
+        # Passing this line = Alice has enough, so sending a transaction now makes sense
     """
     ok, balance, spendable = has_sufficient_balance(client, address, required_xrp)
     if not ok:
@@ -93,7 +95,7 @@ def require_sufficient_balance(
 
 
 if __name__ == "__main__":
-    # 用现有账户自测
+    # Self-test against existing accounts
     client = JsonRpcClient("https://s.altnet.rippletest.net:51234")
     samples = {
         "B (active)": "rBTJw7LEo85VjZENPPCqNQe2cWRW6EMZKk",

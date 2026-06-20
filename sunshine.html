@@ -107,7 +107,7 @@
 </div>
 
 <script>
-// 每步只保留展示用元数据；status / log / payload 全部来自后端真实响应。
+// Each step keeps only display metadata; status / log / payload all come from the real backend response.
 const META = {
   req:    {icon:"ti-robot",           sub:"intent received via x402"},
   pre:    {icon:"ti-search",          sub:"activation + balance (REAL)"},
@@ -117,11 +117,11 @@ const META = {
 };
 const ORDER = ["req","pre","kya","dex","settle"];
 
-let RES = [];            // 后端返回的 tasks（按 ORDER）
-let states = {};         // id -> 渲染状态 pending/active/success/failed/skipped
+let RES = [];            // tasks returned by the backend (in ORDER)
+let states = {};         // id -> render state: pending/active/success/failed/skipped
 let cursor = -1, timer = null, selected = null, t0 = 0;
-let lastIntent = null;   // 本次提交的意图（给 audit log 用）
-let auditEmpty = true;   // audit log 是否还是空占位
+let lastIntent = null;   // the intent submitted this run (for the audit log)
+let auditEmpty = true;   // whether the audit log is still the empty placeholder
 
 const tasklist=document.getElementById("tasklist");
 const logEl=document.getElementById("log");
@@ -130,7 +130,7 @@ const badge=document.getElementById("badge");
 const intentEl=document.getElementById("intent");
 const auditEl=document.getElementById("audit");
 
-// 往 audit log 顶部追加一条交易结果（永久累积，不随 reset 清空）
+// Prepend one transaction outcome to the audit log (persists forever, not cleared by reset)
 function recordAudit(status, summary, why){
   if(auditEmpty){ auditEl.innerHTML=""; auditEmpty=false; }
   const m={SUCCESS:["var(--color-background-success)","var(--color-text-success)"],
@@ -145,10 +145,10 @@ function recordAudit(status, summary, why){
       <span style="padding:2px 8px; border-radius:6px; background:${bg}; color:${fg}; font-weight:600;">${status}</span>
       <span style="color:var(--color-text-primary);">${summary}</span></div>
     ${why?`<div style="color:${fg}; opacity:.9; padding-left:2px;">↳ ${why}</div>`:""}`;
-  auditEl.prepend(row);   // 最新在最上
+  auditEl.prepend(row);   // newest on top
 }
 
-// 后端 status -> UI 渲染状态
+// backend status -> UI render state
 const UI = {pass:"success", fail:"failed", skipped:"skipped"};
 
 function byId(id){ return RES.find(t=>t.id===id) || null; }
@@ -250,12 +250,12 @@ async function run(unverified){
   }catch(e){ addLog("network error · "+e.message, "err"); setBadge("error","err");
     recordAudit("ERROR", "network error", e.message); return; }
 
-  RES=data.tasks;                       // 真实结果，按 ORDER
-  cursor=0; step(); timer=setInterval(step, 1100);   // 逐步回放动画
+  RES=data.tasks;                       // real results, in ORDER
+  cursor=0; step(); timer=setInterval(step, 1100);   // step-by-step replay animation
 }
 
 function step(){
-  // 收尾上一个已"active"的任务 -> 落到它的真实状态 + 真实日志
+  // Finalize the previously "active" task -> settle it to its real status + real log line
   if(cursor>0){
     const prev=RES[cursor-1];
     states[prev.id]=UI[prev.status];
@@ -285,7 +285,7 @@ function step(){
   selected=cursor; renderTasks(); showDetail(cursor); cursor++;
 }
 
-// 启动时拉取 Alice 真实地址预填到 intent
+// On load, fetch Alice's real address and prefill it into the intent
 (async()=>{
   try{
     const r=await fetch("/alice"); const j=await r.json();
