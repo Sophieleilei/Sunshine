@@ -1,0 +1,13 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Secrets — wallet seeds (private keys). Never commit, even testnet.
+demo_wallets.json
+
+# Dev / tooling artifacts
+.playwright-mcp/
+.claude/
+*.png
+.DS_Store

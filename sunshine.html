@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sunshine · x402 payment pipeline</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.2.0/dist/tabler-icons.min.css">
+<style>
+  :root{
+    --color-background-primary:#ffffff; --color-background-secondary:#f4f5f7;
+    --color-background-info:#e7f0ff; --color-background-success:#e6f6ec;
+    --color-background-danger:#fdecec;
+    --color-text-primary:#1a1d21; --color-text-secondary:#5b6470; --color-text-tertiary:#8a93a0;
+    --color-text-info:#2563eb; --color-text-success:#1a8a4f; --color-text-danger:#d23a3a;
+    --color-border-tertiary:#e3e6ea; --color-border-secondary:#cdd2d9;
+    --color-border-info:#9cc0ff; --color-border-success:#9ad9b4; --color-border-danger:#f0a8a8;
+    --border-radius-md:8px; --border-radius-lg:14px;
+    --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:#eef0f3; color:var(--color-text-primary); font-family:var(--font-sans);}
+  .wrap{max-width:880px; margin:0 auto; padding:24px 20px 48px;}
+  header.app{display:flex; align-items:center; gap:10px; margin-bottom:4px;}
+  header.app .logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#ffd54a,#ff9d2e);
+    display:flex;align-items:center;justify-content:center;color:#7a4a00;}
+  header.app h1{font-size:18px; margin:0; font-weight:600;}
+  header.app .tag{margin-left:8px;font-size:11px;color:var(--color-text-secondary);
+    background:var(--color-background-secondary);padding:3px 8px;border-radius:6px;}
+  textarea,button{font-family:inherit;}
+  button{cursor:pointer; border:0.5px solid var(--color-border-secondary); background:var(--color-background-secondary);
+    color:var(--color-text-primary); border-radius:var(--border-radius-md); padding:8px 14px; font-size:13px;}
+  button#submit{background:var(--color-text-info); color:#fff; border-color:var(--color-text-info);}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="app">
+  <span class="logo"><i class="ti ti-sun-filled" style="font-size:18px"></i></span>
+  <h1>Sunshine</h1>
+  <span class="tag">x402 → XRPL payment pipeline · testnet</span>
+</header>
+
+<h2 class="sr-only">Sunshine demo dashboard: a payment intent request panel where agent Alice submits a payment to an x402 endpoint, followed by live task tracking through precheck, KYA gate, DEX conversion and settlement, with a timestamped event log.</h2>
+
+<div style="padding: 1rem 0;">
+
+  <div style="background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); padding:1rem 1.25rem; margin-bottom:16px;">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+      <div style="width:32px; height:32px; border-radius:50%; background:var(--color-background-info); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:500; color:var(--color-text-info);">A</div>
+      <div style="display:flex; flex-direction:column;">
+        <span style="font-size:14px; font-weight:500;">Alice · payer agent</span>
+        <span style="font-size:12px; color:var(--color-text-secondary);">submits a payment intent</span>
+      </div>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; font-family:var(--font-mono); font-size:12px;">
+      <span style="padding:3px 8px; border-radius:var(--border-radius-md); background:var(--color-background-success); color:var(--color-text-success); font-weight:500;">POST</span>
+      <span style="color:var(--color-text-secondary);">https://api.sunshine.dev/pay</span>
+      <span style="margin-left:auto; padding:3px 8px; border-radius:var(--border-radius-md); background:var(--color-background-secondary); color:var(--color-text-tertiary);">x402</span>
+    </div>
+
+    <textarea id="intent" rows="7" spellcheck="false" style="width:100%; font-family:var(--font-mono); font-size:12px; line-height:1.6; resize:vertical; padding:10px 12px; border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-md);">{
+  "payer_xrpl": "loading…",
+  "payee_xrpl": "rPay7Hn…payee",
+  "amount": 2.50,
+  "source_currency": "RLUSD",
+  "target_currency": "EUR",
+  "payee_iban": "CH93 0076 2011 6238 5295 7"
+}</textarea>
+
+    <div style="display:flex; align-items:center; gap:8px; margin-top:10px; flex-wrap:wrap;">
+      <button id="submit" style="width:auto;"><i class="ti ti-send" style="font-size:16px; vertical-align:-2px; margin-right:4px" aria-hidden="true"></i>Submit payment</button>
+      <button id="reset" style="width:auto;" aria-label="Reset"><i class="ti ti-refresh" style="font-size:16px; vertical-align:-2px;" aria-hidden="true"></i></button>
+      <span id="badge" style="margin-left:auto; font-size:12px; padding:4px 10px; border-radius:var(--border-radius-md); background:var(--color-background-secondary); color:var(--color-text-secondary);">idle</span>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1.35fr 1fr; gap:16px; align-items:start;">
+    <div id="tasklist" style="display:flex; flex-direction:column; gap:8px;"></div>
+    <div style="background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); overflow:hidden;">
+      <div style="padding:8px 12px; border-bottom:0.5px solid var(--color-border-tertiary); font-size:13px; color:var(--color-text-secondary); display:flex; align-items:center; gap:6px;">
+        <i class="ti ti-terminal-2" style="font-size:15px;" aria-hidden="true"></i>Event log
+      </div>
+      <div id="log" style="padding:8px 12px; min-height:230px; max-height:280px; overflow-y:auto; font-family:var(--font-mono); font-size:11.5px; line-height:1.7;">
+        <div style="color:var(--color-text-tertiary);">waiting for submit…</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="detail" style="margin-top:16px; background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); padding:1rem 1.25rem; min-height:80px;">
+    <p style="color:var(--color-text-secondary); margin:0; font-size:14px;">Edit Alice's intent above, then submit to watch the real pipeline run. Click any task to inspect its payload.</p>
+  </div>
+
+  <div style="margin-top:16px; background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); overflow:hidden;">
+    <div style="padding:10px 14px; border-bottom:0.5px solid var(--color-border-tertiary); font-size:13px; color:var(--color-text-secondary); display:flex; align-items:center; gap:6px;">
+      <i class="ti ti-clipboard-list" style="font-size:15px;" aria-hidden="true"></i>Audit log
+      <span style="margin-left:auto; font-size:11px; color:var(--color-text-tertiary);">transaction outcomes · newest first</span>
+    </div>
+    <div id="audit" style="font-family:var(--font-mono); font-size:11.5px; max-height:260px; overflow-y:auto;">
+      <div style="padding:12px 14px; color:var(--color-text-tertiary);">no transactions yet</div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script>
+// 每步只保留展示用元数据；status / log / payload 全部来自后端真实响应。
+const META = {
+  req:    {icon:"ti-robot",           sub:"intent received via x402"},
+  pre:    {icon:"ti-search",          sub:"activation + balance (REAL)"},
+  kya:    {icon:"ti-id-badge-2",      sub:"verify agent credential (stub)"},
+  dex:    {icon:"ti-arrows-exchange", sub:"RLUSD → EUR token (stub)"},
+  settle: {icon:"ti-coin",            sub:"pay recipient wallet (stub)"},
+};
+const ORDER = ["req","pre","kya","dex","settle"];
+
+let RES = [];            // 后端返回的 tasks（按 ORDER）
+let states = {};         // id -> 渲染状态 pending/active/success/failed/skipped
+let cursor = -1, timer = null, selected = null, t0 = 0;
+let lastIntent = null;   // 本次提交的意图（给 audit log 用）
+let auditEmpty = true;   // audit log 是否还是空占位
+
+const tasklist=document.getElementById("tasklist");
+const logEl=document.getElementById("log");
+const detail=document.getElementById("detail");
+const badge=document.getElementById("badge");
+const intentEl=document.getElementById("intent");
+const auditEl=document.getElementById("audit");
+
+// 往 audit log 顶部追加一条交易结果（永久累积，不随 reset 清空）
+function recordAudit(status, summary, why){
+  if(auditEmpty){ auditEl.innerHTML=""; auditEmpty=false; }
+  const m={SUCCESS:["var(--color-background-success)","var(--color-text-success)"],
+           BLOCKED:["var(--color-background-danger)","var(--color-text-danger)"],
+           ERROR:["var(--color-background-danger)","var(--color-text-danger)"]};
+  const [bg,fg]=m[status]||m.ERROR;
+  const now=new Date().toLocaleTimeString();
+  const row=document.createElement("div");
+  row.style.cssText="padding:8px 14px; border-bottom:0.5px solid var(--color-border-tertiary); display:flex; flex-direction:column; gap:3px;";
+  row.innerHTML=`<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+      <span style="color:var(--color-text-tertiary);">${now}</span>
+      <span style="padding:2px 8px; border-radius:6px; background:${bg}; color:${fg}; font-weight:600;">${status}</span>
+      <span style="color:var(--color-text-primary);">${summary}</span></div>
+    ${why?`<div style="color:${fg}; opacity:.9; padding-left:2px;">↳ ${why}</div>`:""}`;
+  auditEl.prepend(row);   // 最新在最上
+}
+
+// 后端 status -> UI 渲染状态
+const UI = {pass:"success", fail:"failed", skipped:"skipped"};
+
+function byId(id){ return RES.find(t=>t.id===id) || null; }
+
+function sc(s){
+  if(s==="success") return {bg:"var(--color-background-success)", fg:"var(--color-text-success)", bd:"var(--color-border-success)"};
+  if(s==="active")  return {bg:"var(--color-background-info)", fg:"var(--color-text-info)", bd:"var(--color-border-info)"};
+  if(s==="failed")  return {bg:"var(--color-background-danger)", fg:"var(--color-text-danger)", bd:"var(--color-border-danger)"};
+  if(s==="skipped") return {bg:"var(--color-background-secondary)", fg:"var(--color-text-tertiary)", bd:"var(--color-border-tertiary)"};
+  return {bg:"var(--color-background-secondary)", fg:"var(--color-text-tertiary)", bd:"var(--color-border-tertiary)"};
+}
+
+function labelOf(id){ const t=byId(id); return t? t.label : id; }
+
+function renderTasks(){
+  tasklist.innerHTML="";
+  ORDER.forEach((id,i)=>{
+    const s=states[id]||"pending"; const c=sc(s); const sel=selected===i;
+    let glyph=META[id].icon;
+    if(s==="success") glyph="ti-circle-check";
+    if(s==="failed") glyph="ti-circle-x";
+    if(s==="skipped") glyph="ti-minus";
+    const pulse=s==="active"?"animation:nsp 1s ease-in-out infinite;":"";
+    const row=document.createElement("button");
+    row.style.cssText=`display:flex; align-items:center; gap:12px; width:100%; padding:12px 14px; border-radius:var(--border-radius-md); background:${c.bg}; border:${sel?2:0.5}px solid ${c.bd}; cursor:pointer; text-align:left;`;
+    row.innerHTML=`<i class="ti ${glyph}" style="font-size:22px; color:${c.fg}; flex-shrink:0; ${pulse}" aria-hidden="true"></i>
+      <span style="display:flex; flex-direction:column; gap:2px;">
+        <span style="font-size:14px; font-weight:500; color:${c.fg};">${labelOf(id)}</span>
+        <span style="font-size:12px; color:${c.fg}; opacity:.78;">${META[id].sub}</span></span>`;
+    row.onclick=()=>{ selected=i; renderTasks(); showDetail(i); };
+    tasklist.appendChild(row);
+  });
+}
+
+function clock(){ return `+${((Date.now()-t0)/1000).toFixed(2).padStart(5,"0")}s`; }
+
+function addLog(text, kind){
+  const colors={info:"var(--color-text-secondary)", ok:"var(--color-text-success)", err:"var(--color-text-danger)", run:"var(--color-text-info)"};
+  const line=document.createElement("div");
+  line.style.cssText=`color:${colors[kind]||colors.info}; margin-bottom:2px;`;
+  line.innerHTML=`<span style="color:var(--color-text-tertiary);">${clock()}</span>  ${text}`;
+  logEl.appendChild(line); logEl.scrollTop=logEl.scrollHeight;
+}
+
+function payloadText(p){
+  if(p==null) return "";
+  if(typeof p==="string") return p;
+  return Object.entries(p).map(([k,v])=>`${k}: ${v}`).join("\n");
+}
+
+function showDetail(i){
+  const id=ORDER[i]; const t=byId(id); const s=states[id]||"pending"; const c=sc(s);
+  const p=t? t.payload : {};
+  const tag={success:"completed", active:"running", failed:"failed", skipped:"skipped", pending:"pending"}[s];
+  detail.innerHTML=`<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+      <span style="font-size:16px; font-weight:500;">${labelOf(id)}</span>
+      <span style="font-size:12px; padding:3px 10px; border-radius:var(--border-radius-md); background:${c.bg}; color:${c.fg};">${tag}</span></div>
+    <p style="font-size:13px; margin:0 0 4px; color:var(--color-text-secondary);">Layer</p>
+    <p style="font-size:14px; margin:0 0 12px;">${(p&&p.layer)||"—"}</p>
+    <p style="font-size:13px; margin:0 0 4px; color:var(--color-text-secondary);">Payload</p>
+    <pre style="font-family:var(--font-mono); font-size:12px; background:var(--color-background-secondary); padding:10px 12px; border-radius:var(--border-radius-md); margin:0; white-space:pre-wrap; line-height:1.6;">${payloadText(p)}</pre>`;
+}
+
+function setBadge(text, kind){
+  const m={idle:["var(--color-background-secondary)","var(--color-text-secondary)"],
+           run:["var(--color-background-info)","var(--color-text-info)"],
+           ok:["var(--color-background-success)","var(--color-text-success)"],
+           err:["var(--color-background-danger)","var(--color-text-danger)"]};
+  badge.textContent=text; badge.style.background=m[kind][0]; badge.style.color=m[kind][1];
+}
+
+function reset(){
+  clearInterval(timer); timer=null; states={}; cursor=-1; selected=null; RES=[];
+  setBadge("idle","idle");
+  logEl.innerHTML='<div style="color:var(--color-text-tertiary);">waiting for submit…</div>';
+  detail.innerHTML='<p style="color:var(--color-text-secondary); margin:0; font-size:14px;">Edit Alice\'s intent above, then submit to watch the real pipeline run. Click any task to inspect its payload.</p>';
+  renderTasks();
+}
+
+async function run(unverified){
+  reset(); t0=Date.now(); logEl.innerHTML="";
+  setBadge("running","run");
+
+  let intent;
+  try{ intent=JSON.parse(intentEl.value); }
+  catch(e){ addLog("invalid intent JSON · "+e.message, "err"); setBadge("bad input","err");
+    recordAudit("ERROR", "request rejected · invalid intent JSON", e.message); return; }
+  lastIntent=intent;
+
+  addLog(unverified?"POST /pay · unverified agent":"POST /pay · request sent", "run");
+
+  let data;
+  try{
+    const resp=await fetch("/pay", {method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({intent, unverified})});
+    data=await resp.json();
+    if(!resp.ok || data.error){ addLog("backend error · "+(data.error||resp.status), "err"); setBadge("error","err");
+      recordAudit("ERROR", "backend error", String(data.error||resp.status)); return; }
+  }catch(e){ addLog("network error · "+e.message, "err"); setBadge("error","err");
+    recordAudit("ERROR", "network error", e.message); return; }
+
+  RES=data.tasks;                       // 真实结果，按 ORDER
+  cursor=0; step(); timer=setInterval(step, 1100);   // 逐步回放动画
+}
+
+function step(){
+  // 收尾上一个已"active"的任务 -> 落到它的真实状态 + 真实日志
+  if(cursor>0){
+    const prev=RES[cursor-1];
+    states[prev.id]=UI[prev.status];
+    addLog(prev.log, prev.status==="fail"?"err":(prev.id==="settle"?"ok":"info"));
+    if(prev.status==="fail"){
+      for(let j=cursor;j<RES.length;j++) states[RES[j].id]="skipped";
+      addLog("halted · pipeline stopped", "err");
+      clearInterval(timer); timer=null;
+      setBadge("blocked at "+prev.id, "err");
+      const why=(prev.payload&&prev.payload.reason)
+        ? prev.payload.reason.replace(/\s*\n+\s*/g," ").trim() : prev.log;
+      recordAudit("BLOCKED", `blocked at ${prev.label}`, why);
+      selected=cursor-1; renderTasks(); showDetail(cursor-1); return;
+    }
+  }
+  if(cursor>=RES.length){
+    clearInterval(timer); timer=null;
+    addLog("settled · receipt returned to Alice", "ok");
+    setBadge("settled","ok");
+    const it=lastIntent||{};
+    recordAudit("SUCCESS",
+      `Alice → ${it.payee_xrpl||"payee"} · ${it.amount} ${it.source_currency||""}→${it.target_currency||""}`,
+      "all 5 tasks passed · settled");
+    selected=RES.length-1; renderTasks(); showDetail(RES.length-1); return;
+  }
+  const cur=RES[cursor]; states[cur.id]="active";
+  selected=cursor; renderTasks(); showDetail(cursor); cursor++;
+}
+
+// 启动时拉取 Alice 真实地址预填到 intent
+(async()=>{
+  try{
+    const r=await fetch("/alice"); const j=await r.json();
+    if(j.address){ intentEl.value=intentEl.value.replace("loading…", j.address); }
+  }catch(e){ intentEl.value=intentEl.value.replace("loading…","(offline)"); }
+})();
+
+document.getElementById("submit").onclick=()=>run(false);
+document.getElementById("reset").onclick=reset;
+
+const st=document.createElement("style");
+st.textContent="@keyframes nsp{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.18);opacity:.6}} #log::-webkit-scrollbar{width:6px} #log::-webkit-scrollbar-thumb{background:var(--color-border-secondary);border-radius:3px}";
+document.head.appendChild(st);
+renderTasks();
+</script>
+</body>
+</html>
