@@ -1,5 +1,12 @@
-import 'dotenv/config';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
 import { Wallet } from 'xrpl';
+
+// Load .env by ABSOLUTE path (fx-agent/.env) so it works no matter the launcher's
+// working directory — e.g. when Claude Desktop spawns the MCP server.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 function bool(v, def = false) {
   if (v === undefined) return def;
@@ -33,12 +40,12 @@ export const config = {
   // Bridge asset = native XRP (the canonical XRPL cross-currency bridge, ODL-style).
   // No issuer, no trust line, no faucet. RLUSD/stablecoin stays a mainnet config option.
   bridge: 'XRP',
-  // FX rate for the XRP -> target leg: target units per 1 XRP (e.g. 1 XRP = 50 INR).
-  xrpInr: Number(process.env.XRP_INR || 50),
+  // FX rate for the XRP -> target leg: target units per 1 XRP (e.g. 1 XRP = ~10 MXN).
+  xrpRate: Number(process.env.XRP_RATE || process.env.XRP_INR || 10),
 
   // Target currency token — issued by the BANK/gateway (licensed issuer).
   target: {
-    currency: process.env.DEST_CURRENCY || 'INR',
+    currency: process.env.DEST_CURRENCY || 'MXN',
     issuer: process.env.DEST_ISSUER || addr.bank,
   },
 

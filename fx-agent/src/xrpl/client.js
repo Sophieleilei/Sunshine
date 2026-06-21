@@ -50,3 +50,27 @@ export async function submit(tx, wallet, { confirm } = {}) {
   console.log(`    🔗 ${txLink(res.result.hash)}`);
   return res.result;
 }
+
+// --- Non-custodial two-trip helpers ---------------------------------------
+// Trip 1: build + autofill an UNSIGNED tx (no key touched). Returns the unsigned,
+// autofilled transaction JSON — this is what the orchestrator hands back for the
+// agent to sign.
+export async function prepareTx(tx) {
+  const client = await getClient();
+  return client.autofill(tx);
+}
+
+// Trip 2: the agent signs the (autofilled) tx LOCALLY with its own key, then submits.
+// The private key never leaves this process.
+export async function submitSigned(prepared, wallet) {
+  const client = await getClient();
+  const signed = wallet.sign(prepared);
+  const res = await client.submitAndWait(signed.tx_blob);
+  const code = res.result.meta?.TransactionResult;
+  if (code !== 'tesSUCCESS') {
+    throw new Error(`${prepared.TransactionType} failed: ${code}`);
+  }
+  log.ok(`${prepared.TransactionType} signed+submitted`, { result: code });
+  console.log(`    🔗 ${txLink(res.result.hash)}`);
+  return res.result;
+}

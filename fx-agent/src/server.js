@@ -8,10 +8,13 @@ import http from 'http';
 import crypto from 'crypto';
 import { config } from './config.js';
 import { log } from './util/log.js';
-import { run } from './orchestrator.js';
+import { run, prepareSettlement, submitSettlement } from './orchestrator.js';
 import { txLink } from './util/explorer.js';
+import { handleDashboard } from './dashboard.js';
+import { recordSettlement } from './util/store.js';
 
 const PORT = Number(process.env.FX_AGENT_PORT || 8787);
+const DASHBOARD = `http://localhost:${PORT}/`;
 
 function buildInvoice(amount) {
   const id = 'INV-' + Date.now();
@@ -68,6 +71,9 @@ function send(res, code, obj) {
 const server = http.createServer((req, res) => {
   if (req.method === 'OPTIONS') return send(res, 204, {});
 
+  // Dashboard: GET / and GET /api/settlements
+  if (handleDashboard(req, res)) return;
+
   if (req.method === 'GET' && req.url === '/health') {
     return send(res, 200, {
       status: 'ok',
@@ -96,7 +102,49 @@ const server = http.createServer((req, res) => {
       try {
         log.step('HTTP /settle', { amount, forcedKYA: forcedKYA || 'PASS', bankAddress: bankAddress || '(default bank)' });
         const result = await run(buildInvoice(amount), { forcedKYA, bankAddress });
-        return send(res, 200, toResponse(result));
+        const resp = toResponse(result);
+        recordSettlement(resp);
+        return send(res, 200, { ...resp, dashboard: DASHBOARD });
+      } catch (e) {
+        return send(res, 500, { ok: false, error: e.message });
+      }
+    });
+    return;
+  }
+
+  // Trip 1: build the UNSIGNED conversion tx (mint + KYA + prepare). No key touched.
+  if (req.method === 'POST' && req.url === '/prepare') {
+    let body = '';
+    req.on('data', (c) => (body += c));
+    req.on('end', async () => {
+      try {
+        const j = body ? JSON.parse(body) : {};
+        const validPayee = typeof j.payeeXrpl === 'string' && /^r[1-9A-HJ-NP-Za-km-z]{24,34}$/.test(j.payeeXrpl);
+        log.step('HTTP /prepare', { amount: j.amount, forcedKYA: j.forcedKYA || 'PASS' });
+        const r = await prepareSettlement(buildInvoice(j.amount), {
+          forcedKYA: j.forcedKYA,
+          bankAddress: validPayee ? j.payeeXrpl : undefined,
+        });
+        return send(res, 200, r);
+      } catch (e) {
+        return send(res, 500, { ok: false, error: e.message });
+      }
+    });
+    return;
+  }
+
+  // Trip 2: agent signs the unsigned tx with its own key + submits (DEX), then payout.
+  if (req.method === 'POST' && req.url === '/submit') {
+    let body = '';
+    req.on('data', (c) => (body += c));
+    req.on('end', async () => {
+      try {
+        const j = body ? JSON.parse(body) : {};
+        if (!j.unsignedTx || !j.context) return send(res, 400, { ok: false, error: 'need unsignedTx + context' });
+        log.step('HTTP /submit', { invoice: j.context.invoiceId });
+        const resp = await submitSettlement({ unsignedTx: j.unsignedTx, context: j.context });
+        recordSettlement(resp);
+        return send(res, 200, { ...resp, dashboard: DASHBOARD });
       } catch (e) {
         return send(res, 500, { ok: false, error: e.message });
       }
@@ -109,6 +157,6 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, () => {
   log.ok(`fx-agent HTTP API on http://localhost:${PORT}`, {
-    endpoints: 'GET /health, POST /settle',
+    endpoints: 'GET / (dashboard), GET /health, POST /settle',
   });
 });

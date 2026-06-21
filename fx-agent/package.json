@@ -8,6 +8,7 @@
     "setup": "node src/scripts/setup.js",
     "seed": "node src/scripts/seed.js",
     "serve": "node src/server.js",
+    "mcp": "node src/mcp.js",
     "demo": "node src/index.js",
     "demo:hold": "node src/index.js --kya=HOLD",
     "demo:revert": "node src/index.js --kya=REVERT"
@@ -16,8 +17,10 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^16.4.5",
     "five-bells-condition": "^5.0.1",
-    "xrpl": "^4.1.0"
+    "xrpl": "^4.1.0",
+    "zod": "^4.4.3"
   }
 }

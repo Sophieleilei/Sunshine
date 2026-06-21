@@ -26,34 +26,34 @@ async function main() {
   const mm = walletFromSeed(config.seeds.mm);
   const bank = walletFromSeed(config.seeds.bank);
 
-  const INR = config.target.currency;
-  const inrIss = config.target.issuer;
-  const rate = config.xrpInr; // INR per 1 XRP
+  const TGT = config.target.currency; // e.g. MXN
+  const tgtIss = config.target.issuer;
+  const rate = config.xrpRate; // target units per 1 XRP
 
-  // Pool sizing: MM seeds POOL_XRP and the matching INR at the demo rate.
+  // Pool sizing: MM seeds POOL_XRP and the matching target at the demo rate.
   const POOL_XRP = 80;
-  const POOL_INR = POOL_XRP * rate;
+  const POOL_TGT = POOL_XRP * rate;
 
-  log.step('0. Enable DefaultRipple on the bank (INR issuer) so INR can ripple/AMM');
+  log.step(`0. Enable DefaultRipple on the bank (${TGT} issuer) so ${TGT} can ripple/AMM`);
   await submit({ TransactionType: 'AccountSet', Account: bank.address, SetFlag: 8 }, bank);
 
-  log.step('1. Trust lines to INR (agent + MM). XRP needs none.');
-  await setTrustLine(agent, { currency: INR, issuer: inrIss });
-  await setTrustLine(mm, { currency: INR, issuer: inrIss });
+  log.step(`1. Trust lines to ${TGT} (agent + MM). XRP needs none.`);
+  await setTrustLine(agent, { currency: TGT, issuer: tgtIss });
+  await setTrustLine(mm, { currency: TGT, issuer: tgtIss });
 
-  log.step('2. Bank issues INR to MM (for the pool)');
-  await pay(bank, mm.address, tok(INR, inrIss, POOL_INR));
+  log.step(`2. Bank issues ${TGT} to MM (for the pool)`);
+  await pay(bank, mm.address, tok(TGT, tgtIss, POOL_TGT));
 
   log.step('3. Alice funds the agent with XRP (per-invoice bridge value)');
   await pay(alice, agent.address, xrpToDrops('30'));
 
-  log.step(`4. MM posts the XRP/INR AMM pool (${POOL_XRP} XRP / ${POOL_INR} INR)`);
+  log.step(`4. MM posts the XRP/${TGT} AMM pool (${POOL_XRP} XRP / ${POOL_TGT} ${TGT})`);
   await submit(
     {
       TransactionType: 'AMMCreate',
       Account: mm.address,
       Amount: xrpToDrops(String(POOL_XRP)),
-      Amount2: tok(INR, inrIss, POOL_INR),
+      Amount2: tok(TGT, tgtIss, POOL_TGT),
       TradingFee: 500, // 0.5%
       Fee: '2000000', // AMMCreate special one-time fee
     },
@@ -67,7 +67,7 @@ async function main() {
     BANK: bank.address,
   });
 
-  log.ok('liquidity seeded (XRP/INR) — ready for `npm run demo`');
+  log.ok(`liquidity seeded (XRP/${TGT}) — ready for \`npm run demo\``);
   await disconnect();
 }
 

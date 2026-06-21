@@ -2,13 +2,14 @@ import { xrpToDrops } from 'xrpl';
 import { config } from './config.js';
 import { log } from './util/log.js';
 import { S, newSettlement, transition } from './state.js';
-import { walletFromSeed } from './xrpl/client.js';
+import { walletFromSeed, submitSigned } from './xrpl/client.js';
 import { mintInvoiceMPT } from './modules/mpt.js';
 import { checkKYA, awaitKYAClearance, KYA } from './modules/kya.js';
-import { convert } from './modules/dex.js';
+import { convert, prepareConvert } from './modules/dex.js';
 import { returnToSender } from './modules/revert.js';
 import { payBank } from './modules/payout.js';
 import { snapshot } from './util/balances.js';
+import { txLink } from './util/explorer.js';
 
 // Screen-first, escrow-free lifecycle:
 //   ISSUED -> MINTED -> KYA -> { PASS|HOLD->cleared -> CONVERT -> PAYOUT -> PAID
@@ -29,7 +30,7 @@ export async function run(invoice, { forcedKYA, bankAddress: bankOverride } = {}
 
   // Bridge = native XRP (agent holds it, funded by Alice). invoice.amount is in the
   // target currency (INR); xrpNominal is the XRP equivalent at the demo FX rate.
-  const xrpNominal = Number(invoice.amount) / config.xrpInr; // XRP the sender's value buys
+  const xrpNominal = Number(invoice.amount) / config.xrpRate; // XRP the sender's value buys
   const xrpDrops = (xrp) => xrpToDrops(xrp.toFixed(6));
 
   try {
@@ -67,12 +68,13 @@ export async function run(invoice, { forcedKYA, bankAddress: bankOverride } = {}
       issuer: config.target.issuer,
       value: invoice.amount,
     };
-    const sendMax = xrpDrops(xrpNominal * (1 + config.maxSlippage)); // XRP drops ceiling
-    const cres = await convert(agent, { destAmount, sendMax });
+    // Generous cap for quoting; the real guard is the live quote + maxSlippage (in dex.js).
+    const sendMax = xrpDrops(xrpNominal * 3);
+    const cres = await convert(agent, { destAmount, sendMax, maxSlippage: config.maxSlippage });
     transition(s, S.CONVERTED, {
       convertedAmount: destAmount,
       stableSpent: sendMax,
-      fxRate: config.xrpInr,
+      fxRate: config.xrpRate,
       convertHash: cres?.hash,
     });
 
@@ -92,4 +94,80 @@ export async function run(invoice, { forcedKYA, bankAddress: bankOverride } = {}
 async function finish(_s, result, accounts) {
   await snapshot('AFTER', accounts);
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// Non-custodial two-trip API (for the Sunshine prepare → sign → submit flow).
+// ---------------------------------------------------------------------------
+
+// TRIP 1: mint the invoice, run KYA, and (on PASS) BUILD the unsigned conversion tx.
+// No signing happens here — the unsigned tx is returned for the agent to sign.
+export async function prepareSettlement(invoice, { forcedKYA, bankAddress } = {}) {
+  const agent = walletFromSeed(config.seeds.agent);
+  const bank = bankAddress || config.addr.bank;
+  const aliceAddress = config.addr.alice;
+  const xrpNominal = Number(invoice.amount) / config.xrpRate;
+
+  log.step('PREPARE · mint invoice MPT');
+  const mptId = await mintInvoiceMPT(agent, invoice);
+
+  log.step('PREPARE · KYA gate (pre-conversion)');
+  const verdict = await checkKYA({ agentAddress: agent.address, bankAddress: bank }, forcedKYA);
+
+  if (verdict === KYA.REVERT) {
+    log.step('PREPARE · REVERT — returning XRP to sender');
+    const r = await returnToSender(agent, {
+      aliceAddress,
+      amount: xrpToDrops(xrpNominal.toFixed(6)),
+      state: { invoiceId: invoice.id, kya: 'REVERT' },
+    });
+    return { status: 'REVERTED', kya: verdict, mptIssuanceId: mptId,
+      revert: { returnedTo: aliceAddress, tx: r?.hash, explorer: r?.hash && txLink(r.hash) } };
+  }
+  if (verdict === KYA.HOLD) {
+    return { status: 'HOLD', kya: verdict, mptIssuanceId: mptId };
+  }
+
+  log.step('PREPARE · build UNSIGNED conversion tx (no key)');
+  const destAmount = { currency: config.target.currency, issuer: config.target.issuer, value: invoice.amount };
+  const cap = xrpToDrops((xrpNominal * 3).toFixed(6));
+  const { unsignedTx, preview } = await prepareConvert(agent, { destAmount, sendMax: cap, maxSlippage: config.maxSlippage });
+
+  // Context the caller passes back to submitSettlement (Sunshine holds it; never the key).
+  return {
+    status: 'PREPARED',
+    kya: verdict,
+    invoiceId: invoice.id,
+    mptIssuanceId: mptId,
+    unsignedTx,
+    preview,
+    context: { destAmount, bankAddress: bank, invoiceId: invoice.id, mptIssuanceId: mptId },
+  };
+}
+
+// TRIP 2: the agent SIGNS the unsigned tx with its own key and submits it (DEX swap),
+// then pays the bank. Returns the settlement certificate.
+export async function submitSettlement({ unsignedTx, context }) {
+  const agent = walletFromSeed(config.seeds.agent);
+  const { destAmount, bankAddress, invoiceId, mptIssuanceId } = context;
+
+  log.step('SUBMIT · agent signs unsigned tx locally + submits (DEX convert)');
+  const cres = await submitSigned(unsignedTx, agent);
+
+  log.step('SUBMIT · payout to bank (redemption)');
+  const pres = await payBank(agent, {
+    bankAddress,
+    amount: destAmount,
+    state: { invoiceId, mptIssuanceId, kya: 'PASS' },
+  });
+
+  return {
+    ok: true,
+    status: 'PAID',
+    invoiceId,
+    mptIssuanceId,
+    kya: { verdict: 'PASS', decision: 'ALLOW' },
+    convert: { received: `${destAmount.value} ${destAmount.currency}`, tx: cres?.hash, explorer: cres?.hash && txLink(cres.hash) },
+    settle: { paidToBank: bankAddress, tx: pres?.hash, explorer: pres?.hash && txLink(pres.hash) },
+  };
 }
